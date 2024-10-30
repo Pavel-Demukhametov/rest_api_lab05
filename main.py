@@ -1,106 +1,61 @@
-import requests
-import json
-import os
-from dotenv import load_dotenv
+# main.py
+import logging
+import argparse
+from vk_api import fetch_user_info, process_user, session  # импортируем session
+from neo4j_db import Neo4jHandler
+from logger import setup_logging
+from config import ACCESS_TOKEN
 
-load_dotenv()
+def main():
+    # Инициализация логирования
+    setup_logging()
+    logger = logging.getLogger(__name__)
 
-ACCESS_TOKEN = os.getenv("VK_TOKEN")
-API_URL = "https://api.vk.com/method/"
-def fetch_user_info(user_identifier):
-    endpoint = f"{API_URL}users.get"
-    parameters = {
-        "user_ids": user_identifier,
-        "fields": "followers_count",
-        "access_token": ACCESS_TOKEN,
-        "v": "5.131"
-    }
-    response = requests.get(endpoint, params=parameters)
-    return response.json()
+    # Проверка наличия ACCESS_TOKEN
+    if not ACCESS_TOKEN:
+        logger.error("VK API токен не найден в переменных окружения.")
+        return
 
-def fetch_followers(user_identifier):
-    endpoint = f"{API_URL}users.getFollowers"
-    parameters = {
-        "user_id": user_identifier,
-        "access_token": ACCESS_TOKEN,
-        "v": "5.131"
-    }
-    response = requests.get(endpoint, params=parameters)
-    return response.json()
-
-def fetch_follower_details(follower_ids):
-    endpoint = f"{API_URL}users.get"
-    parameters = {
-        "user_ids": ",".join(map(str, follower_ids)),
-        "fields": "first_name,last_name",
-        "access_token": ACCESS_TOKEN,
-        "v": "5.131"
-    }
-    response = requests.get(endpoint, params=parameters)
-    return response.json()
-
-def fetch_subscriptions(user_identifier):
-    endpoint = f"{API_URL}users.getSubscriptions"
-    parameters = {
-        "user_id": user_identifier,
-        "access_token": ACCESS_TOKEN,
-        "v": "5.131"
-    }
-    response = requests.get(endpoint, params=parameters)
-    return response.json()
-
-def fetch_group_details(group_ids):
-    endpoint = f"{API_URL}groups.getById"
-    parameters = {
-        "group_ids": ",".join(map(str, group_ids)),
-        "fields": "name",
-        "access_token": ACCESS_TOKEN,
-        "v": "5.131"
-    }
-    response = requests.get(endpoint, params=parameters)
-    return response.json()
-
-def write_to_json_file(data, output_filename="vk_user_data.json"):
-    output_path = os.path.join(os.getcwd(), output_filename)
-    with open(output_path, "w", encoding="utf-8") as file:
-        json.dump(data, file, ensure_ascii=False, indent=4)
-    print(f"Данные успешно сохранены в файл {output_path}")
-
-
-if not ACCESS_TOKEN:
-    print("Ошибка: Токен VK не установлен в переменных окружения.")
-else:
     user_input = input("Введите ID пользователя или его screen_name: ")
-    if user_input == "":
-        print("Не было переданно значение. Используется https://vk.com/dm")
+    if not user_input:
+        logger.info("Не было передано значение. Используется https://vk.com/dm")
         user_input = "dm"
-        
-    user_info = fetch_user_info(user_input)
 
-    if user_info and 'response' in user_info:
-        user_details = user_info['response'][0]
-        user_id = user_details['id']
+    # Получение информации о пользователе
+    user_info = fetch_user_info(user_input, session)
+    if not user_info:
+        logger.error("Не удалось получить информацию о пользователе.")
+        return
 
-        if user_details.get('is_closed', True):
-            followers_info, subscriptions_info = {}, {}
-        else:
-            followers_info = fetch_followers(user_id)
-            if 'response' in followers_info:
-                follower_ids = followers_info['response']['items']
-                follower_details = fetch_follower_details(follower_ids)
-                followers_info['details'] = follower_details['response']
+    # Проверка и инициализация Neo4jHandler
+    neo4j_handler = Neo4jHandler()
+    if neo4j_handler.driver is None:
+        logger.error("Не удалось подключиться к Neo4j. Программа завершена.")
+        return
 
-            subscriptions_info = fetch_subscriptions(user_id)
-            if 'response' in subscriptions_info and 'groups' in subscriptions_info['response']:
-                group_ids = subscriptions_info['response']['groups']['items']
-                group_details = fetch_group_details(group_ids)
-                subscriptions_info['details'] = group_details['response']
+    try:
+        # Обработка данных пользователя
+        process_user(user_info['id'], depth=0, processed_users=set(), neo4j_handler=neo4j_handler, session=session)
+        logger.info("Сбор и сохранение данных завершены.")
 
-        result_data = {
-            "user": user_info,
-            "followers": followers_info,
-            "subscriptions": subscriptions_info
-        }
-        write_to_json_file(result_data)
-    else:
-        print("Не удалось получить данные о пользователе.")
+        # Выполнение запросов на выборку
+        parser = argparse.ArgumentParser(description='VK Data Analyzer')
+        parser.add_argument('--total_users', action='store_true', help='Всего пользователей')
+        parser.add_argument('--total_groups', action='store_true', help='Всего групп')
+        parser.add_argument('--top_users', action='store_true', help='Топ 5 пользователей по количеству подписчиков')
+        parser.add_argument('--top_groups', action='store_true', help='Топ 5 групп по количеству подписчиков')
+        parser.add_argument('--mutual_followers', action='store_true', help='Пользователи, которые подписаны друг на друга')
+
+        args = parser.parse_args()
+        neo4j_handler.execute_queries(args)
+
+    except Exception as e:
+        logger.error(f"Произошла ошибка: {e}")
+
+    finally:
+        # Закрытие соединения с Neo4j
+        neo4j_handler.close()
+        logger.info("Соединение с Neo4j закрыто.")
+
+if __name__ == "__main__":
+    main()
