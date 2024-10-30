@@ -10,7 +10,6 @@ from urllib3.util.retry import Retry
 
 logger = logging.getLogger(__name__)
 
-# Настраиваем глобальную сессию с увеличенным пулом соединений
 session = requests.Session()
 adapter = HTTPAdapter(pool_connections=100, pool_maxsize=100)
 session.mount("https://", adapter)
@@ -39,9 +38,9 @@ def fetch_user_info(user_identifier, session=session):
 
 def fetch_followers(user_id, session=session):
     all_followers = []
-    count_per_request = 10
+    count_per_request = 5
     offset = 0
-    max_followers = 10  # Максимальное количество подписчиков для запроса
+    max_followers = 5
 
     while len(all_followers) < max_followers:
         endpoint = f"{API_URL}users.getFollowers"
@@ -66,12 +65,10 @@ def fetch_followers(user_id, session=session):
             all_followers.extend(followers)
             logger.debug(f"Получено {len(followers)} подписчиков на шаге с offset={offset}")
 
-            # Проверяем, достигли ли мы максимального количества подписчиков
             if len(all_followers) >= max_followers:
-                all_followers = all_followers[:max_followers]  # Ограничиваем список до max_followers
+                all_followers = all_followers[:max_followers]
                 break
 
-            # Если получено меньше, чем запрошено, то это последний запрос
             if len(followers) < count_per_request:
                 break
 
@@ -87,10 +84,11 @@ def fetch_followers(user_id, session=session):
 def fetch_subscriptions(user_id, session=session):
     all_users = []
     all_groups = []
-    count_per_request = 200
+    count_per_request = 5
     offset = 0
+    max_subscriptions = 5 
 
-    while True:
+    while len(all_users) + len(all_groups) < max_subscriptions:
         endpoint = f"{API_URL}users.getSubscriptions"
         parameters = {
             "user_id": user_id,
@@ -112,19 +110,17 @@ def fetch_subscriptions(user_id, session=session):
                 break
 
             subscriptions = data['response']['items']
-
-            # Временное логирование для проверки структуры данных
-            if offset == 0:
-                logger.debug(f"Пример подписок: {subscriptions[:5]}")
-                for sub in subscriptions[:5]:
-                    logger.debug(f"Тип подписки: {sub.get('type')}")
-
             users = [sub for sub in subscriptions if sub.get('type', '').lower() == 'profile']
             groups = [sub for sub in subscriptions if sub.get('type', '').lower() == 'group']
 
             all_users.extend(users)
             all_groups.extend(groups)
             logger.debug(f"Получено {len(users)} пользователей и {len(groups)} групп на шаге с offset={offset}")
+
+            if len(all_users) + len(all_groups) >= max_subscriptions:
+                all_users = all_users[:max_subscriptions]
+                all_groups = all_groups[:max_subscriptions]
+                break
 
             if len(subscriptions) < count_per_request:
                 break
@@ -138,7 +134,7 @@ def fetch_subscriptions(user_id, session=session):
     logger.info(f"Всего подписок для пользователя {user_id}: {len(all_users)} пользователей и {len(all_groups)} групп")
     return {'users': all_users, 'groups': all_groups}
 
-def process_user(user_id, depth, processed_users, neo4j_handler, session=session, max_workers=10):
+def process_user(user_id, depth, processed_users, neo4j_handler, session=session):
     if depth > 2 or user_id in processed_users:
         return
     processed_users.add(user_id)
@@ -153,44 +149,32 @@ def process_user(user_id, depth, processed_users, neo4j_handler, session=session
     followers = fetch_followers(user_id, session)
     subscriptions = fetch_subscriptions(user_id, session)
 
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        # Обработка подписчиков параллельно
-        follower_futures = {
-            executor.submit(process_user, follower_id, depth + 1, processed_users, neo4j_handler, session, max_workers): follower_id
-            for follower_id in followers
-        }
+    # Обработка подписчиков
+    for follower_id in followers:
+        if follower_id not in processed_users:
+            follower_info = fetch_user_info(follower_id, session)
+            if follower_info:
+                neo4j_handler.create_user_node(follower_info)
+                neo4j_handler.create_follower_relationship(follower_id, user_id)
+                if depth < 2:
+                    process_user(follower_id, depth + 1, processed_users, neo4j_handler, session)
 
-        # Параллельное получение информации о подписанных пользователях
-        user_subscription_futures = {
-            executor.submit(fetch_user_info, sub_user['id'], session): sub_user['id']
-            for sub_user in subscriptions['users'] if 'id' in sub_user
-        }
+    # Обработка подписок на пользователей
+    for sub_user in subscriptions['users']:
+        sub_user_id = sub_user.get('id')
+        if sub_user_id and sub_user_id not in processed_users:
+            sub_user_info = fetch_user_info(sub_user_id, session)
+            if sub_user_info:
+                neo4j_handler.create_user_node(sub_user_info)
+                neo4j_handler.create_subscribe_relationship(user_id, sub_user_id)
+                if depth < 2:
+                    process_user(sub_user_id, depth + 1, processed_users, neo4j_handler, session)
 
-        # Асинхронная обработка результатов подписчиков
-        for future in as_completed(follower_futures):
-            follower_id = follower_futures[future]
-            try:
-                future.result()
-            except Exception as e:
-                logger.error(f"Ошибка при обработке подписчика {follower_id}: {e}")
-
-        # Асинхронная обработка результатов подписок
-        for future in as_completed(user_subscription_futures):
-            sub_user_id = user_subscription_futures[future]
-            try:
-                sub_user_info = future.result()
-                if sub_user_info:
-                    neo4j_handler.create_user_node(sub_user_info)
-                    neo4j_handler.create_subscribe_relationship(user_id, sub_user_id)
-                    if depth < 2:
-                        process_user(sub_user_info['id'], depth + 1, processed_users, neo4j_handler, session, max_workers)
-            except Exception as e:
-                logger.error(f"Ошибка при обработке подписки пользователя {sub_user_id}: {e}")
-
-        # Обработка групп
-        for group in subscriptions['groups']:
-            if 'id' in group:
-                neo4j_handler.create_group_node(group)
-                neo4j_handler.create_subscribe_relationship(user_id, -group['id'])
+    # Обработка подписок на группы
+    for group in subscriptions['groups']:
+        group_id = group.get('id')
+        if group_id:
+            neo4j_handler.create_group_node(group)
+            neo4j_handler.create_subscribe_relationship(user_id, -group_id)
 
     logger.info(f"Завершена обработка пользователя {user_id} на глубине {depth}")

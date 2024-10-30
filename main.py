@@ -1,17 +1,15 @@
 # main.py
 import logging
 import argparse
-from vk_api import fetch_user_info, process_user, session  # импортируем session
+from vk_api import fetch_user_info, process_user, session
 from neo4j_db import Neo4jHandler
 from logger import setup_logging
 from config import ACCESS_TOKEN
 
 def main():
-    # Инициализация логирования
     setup_logging()
     logger = logging.getLogger(__name__)
 
-    # Проверка наличия ACCESS_TOKEN
     if not ACCESS_TOKEN:
         logger.error("VK API токен не найден в переменных окружения.")
         return
@@ -21,24 +19,20 @@ def main():
         logger.info("Не было передано значение. Используется https://vk.com/dm")
         user_input = "dm"
 
-    # Получение информации о пользователе
     user_info = fetch_user_info(user_input, session)
     if not user_info:
         logger.error("Не удалось получить информацию о пользователе.")
         return
 
-    # Проверка и инициализация Neo4jHandler
     neo4j_handler = Neo4jHandler()
     if neo4j_handler.driver is None:
         logger.error("Не удалось подключиться к Neo4j. Программа завершена.")
         return
 
     try:
-        # Обработка данных пользователя
         process_user(user_info['id'], depth=0, processed_users=set(), neo4j_handler=neo4j_handler, session=session)
         logger.info("Сбор и сохранение данных завершены.")
 
-        # Выполнение запросов на выборку
         parser = argparse.ArgumentParser(description='VK Data Analyzer')
         parser.add_argument('--total_users', action='store_true', help='Всего пользователей')
         parser.add_argument('--total_groups', action='store_true', help='Всего групп')
@@ -53,7 +47,6 @@ def main():
         logger.error(f"Произошла ошибка: {e}")
 
     finally:
-        # Закрытие соединения с Neo4j
         neo4j_handler.close()
         logger.info("Соединение с Neo4j закрыто.")
 

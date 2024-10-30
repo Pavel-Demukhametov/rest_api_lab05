@@ -58,28 +58,30 @@ class Neo4jHandler:
         with self.driver.session() as session:
             session.run(query, parameters)
         logger.debug(f"Создан или обновлён узел группы {group_data['id']}")
+        
+    def create_follower_relationship(self, follower_id: int, user_id: int):
+        query = """
+            MATCH (f:User {id: $follower_id})
+            MATCH (u:User {id: $user_id})
+            MERGE (f)-[:Follow]->(u)
+        """
+        parameters = {'follower_id': follower_id, 'user_id': user_id}
+        with self.driver.session() as session:
+            session.run(query, parameters)
+        logger.debug(f"Добавлена связь Follow между {follower_id} и {user_id}")
 
-    def create_follow_relationship(self, from_user_id: int, to_user_id: int):
+
+
+    def create_subscribe_relationship(self, from_id: int, to_id: int):
         query = """
             MATCH (a:User {id: $from_id})
-            MATCH (b:User {id: $to_id})
-            MERGE (a)-[:Follow]->(b)
+            MATCH (b {id: $to_id})
+            MERGE (a)-[:Subscribe]->(b)
         """
-        parameters = {'from_id': from_user_id, 'to_id': to_user_id}
+        parameters = {'from_id': from_id, 'to_id': to_id}
         with self.driver.session() as session:
             session.run(query, parameters)
-        logger.debug(f"Добавлена связь Follow между {from_user_id} и {to_user_id}")
-
-    def create_subscribe_relationship(self, user_id: int, group_id: int):
-        query = """
-            MATCH (u:User {id: $user_id})
-            MATCH (g:Group {id: $group_id})
-            MERGE (u)-[:Subscribe]->(g)
-        """
-        parameters = {'user_id': user_id, 'group_id': group_id}
-        with self.driver.session() as session:
-            session.run(query, parameters)
-        logger.debug(f"Добавлена связь Subscribe между {user_id} и группой {group_id}")
+        logger.debug(f"Добавлена связь Subscribe между {from_id} и {to_id}")
 
     def execute_queries(self, args):
         with self.driver.session() as session:
