@@ -15,7 +15,7 @@ def main():
     parser.add_argument('--top_users', action='store_true', help='Показать топ-5 пользователей по количеству подписчиков')
     parser.add_argument('--top_groups', action='store_true', help='Показать топ-5 групп по количеству подписчиков')
     parser.add_argument('--common_subscription', action='store_true', help='Показать топ-3 пар пользователей с общими подписками')
-    parser.add_argument('--parse_vk', action='store_true', help='Запросить информацию о пользователе и выполнить парсинг VK данных')
+    parser.add_argument('--no_parse_vk', action='store_true', help='Запросить информацию о пользователе и выполнить парсинг VK данных')
 
     args = parser.parse_args()
 
@@ -29,7 +29,7 @@ def main():
         return
 
     try:
-        if args.parse_vk:
+        if not(args.no_parse_vk):
             user_input = input("Введите ID пользователя или его screen_name для VK: ")
             if not user_input:
                 logger.info("Не было передано значение. Используется https://vk.com/dm")
