@@ -1,5 +1,3 @@
-# vk_api.py
-# vk_api.py
 import requests
 import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -38,9 +36,9 @@ def fetch_user_info(user_identifier, session=session):
 
 def fetch_followers(user_id, session=session):
     all_followers = []
-    count_per_request = 5
+    count_per_request = 100
     offset = 0
-    max_followers = 5
+    max_followers = 100
 
     while len(all_followers) < max_followers:
         endpoint = f"{API_URL}users.getFollowers"
@@ -84,9 +82,9 @@ def fetch_followers(user_id, session=session):
 def fetch_subscriptions(user_id, session=session):
     all_users = []
     all_groups = []
-    count_per_request = 5
+    count_per_request = 100
     offset = 0
-    max_subscriptions = 5 
+    max_subscriptions = 100
 
     while len(all_users) + len(all_groups) < max_subscriptions:
         endpoint = f"{API_URL}users.getSubscriptions"

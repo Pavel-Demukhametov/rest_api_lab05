@@ -51,7 +51,7 @@ class Neo4jHandler:
                 g.screen_name = $screen_name
         """
         parameters = {
-            'id': -group_data['id'],  # Отрицательный ID для групп
+            'id': -group_data['id'],
             'name': group_data.get('name', ''),
             'screen_name': group_data.get('screen_name', '')
         }
@@ -89,11 +89,14 @@ class Neo4jHandler:
                 result = session.run("MATCH (u:User) RETURN COUNT(u) AS total_users")
                 total_users = result.single()['total_users']
                 print(f"Всего пользователей: {total_users}")
+                print()
 
             if args.total_groups:
                 result = session.run("MATCH (g:Group) RETURN COUNT(g) AS total_groups")
                 total_groups = result.single()['total_groups']
                 print(f"Всего групп: {total_groups}")
+                print()
+            
 
             if args.top_users:
                 query = """
@@ -106,6 +109,7 @@ class Neo4jHandler:
                 print("Топ 5 пользователей по количеству подписчиков:")
                 for record in result:
                     print(f"{record['name']} (ID: {record['user_id']}) - {record['followers']} подписчиков")
+                print()
 
             if args.top_groups:
                 query = """
@@ -118,19 +122,21 @@ class Neo4jHandler:
                 print("Топ 5 групп по количеству подписчиков:")
                 for record in result:
                     print(f"{record['name']} (ID: {record['group_id']}) - {record['subscribers']} подписчиков")
+                print()
 
-            if args.mutual_followers:
+            if args.common_subscription:   
                 query = """
-                    MATCH (u1:User)-[:Follow]->(u2:User),
-                          (u2)-[:Follow]->(u1)
+                    MATCH (u1:User)-[:Subscribe]->(s)<-[:Subscribe]-(u2:User)
                     WHERE u1.id < u2.id
-                    RETURN u1.name AS user1, u2.name AS user2
+                    WITH u1, u2, COLLECT(s.name) AS common_subscriptions
+                    WHERE SIZE(common_subscriptions) > 0
+                    RETURN u1.name AS user1, u2.name AS user2, SIZE(common_subscriptions) AS shared_subscription_count, common_subscriptions
+                    ORDER BY shared_subscription_count DESC
+                    LIMIT 3
                 """
                 result = session.run(query)
-                print("Пользователи, которые подписаны друг на друга:")
-                mutual_followers_found = False
+                print("Топ 3 пар пользователей, подписанных на одни и те же группы и страницы:")
                 for record in result:
-                    print(f"{record['user1']} и {record['user2']}")
-                    mutual_followers_found = True
-                if not mutual_followers_found:
-                    print("Нет пользователей, которые подписаны друг на друга.")
+                    print(f"{record['user1']} и {record['user2']} подписаны на {record['shared_subscription_count']} общих подписок: {', '.join(record['common_subscriptions'])}")
+                    print()
+                print()
