@@ -1,6 +1,6 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
-from jose import JWTError, jwt
+import jwt  # используем pyjwt
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 
@@ -16,7 +16,7 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
     Создаёт JWT токен.
     """
     to_encode = data.copy()
-    expire = datetime.utcnow() + (expires_delta if expires_delta else timedelta(minutes=15))
+    expire = datetime.now(timezone.utc) + (expires_delta if expires_delta else timedelta(minutes=15))
     to_encode.update({"exp": expire})
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
@@ -26,15 +26,18 @@ def verify_token(token: str) -> Optional[str]:
     Верифицирует JWT токен и возвращает имя пользователя.
     """
     try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM], options={"require": ["exp"]})
         username: str = payload.get("sub")
         if username is None:
             return None
         return username
-    except JWTError:
+    except jwt.ExpiredSignatureError:
+        # Токен истёк
+        return None
+    except jwt.InvalidTokenError:
+        # Токен недействителен
         return None
 
-# Так как мы не хешируем пароли, функция проверки пароля будет простой
 def verify_password(plain_password: str, stored_password: str) -> bool:
     """
     Проверяет совпадение пароля.

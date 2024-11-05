@@ -5,15 +5,14 @@ from app.utils.security import create_access_token, verify_password, ACCESS_TOKE
 
 router = APIRouter()
 
-# Пример пользователей. В реальном приложении используйте базу данных.
 fake_users_db = {
     "admin": {
         "username": "admin",
-        "password": "secret",  # Пароль хранится в открытом виде
+        "password": "secret",
     },
     "user": {
         "username": "user",
-        "password": "password123",  # Другой пример пользователя
+        "password": "password123",
     },
 }
 

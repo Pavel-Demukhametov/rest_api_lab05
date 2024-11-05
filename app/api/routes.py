@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException, Depends
 from app.services.graph_service import Neo4jHandler
 from app.models.node_model import NodeCreate
 from typing import List, Dict, Optional
-from app.utils.security import get_current_user  # Импортируем зависимость для авторизации
+from app.utils.security import get_current_user
 
 router = APIRouter()
 neo4j_handler = Neo4jHandler()
