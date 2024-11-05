@@ -87,7 +87,6 @@ class Neo4jHandler:
         return {"message": f"Node with id {data.id} and relationships created successfully"}
 
     def delete_node(self, node_id: int):
-        """Удалить узел и все его связи."""
         query = "MATCH (n {id: $id}) DETACH DELETE n"
         with self.driver.session() as session:
             result = session.run(query, {"id": node_id})
