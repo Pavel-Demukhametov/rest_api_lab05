@@ -88,26 +88,77 @@
        {"id": 1003, "label": ["Group"]}
      ]
      ```
+    - **Описание полей ответа**:
+       - `id` (int): Идентификатор узла.
+       - `label` (string): Метка узла (например, "User" или "Group").
 
-3. **`GET /node/{node_id}`** - Получение узла и его связей
+3. **`GET /node/{node_id}`** - Получение узла и всех его связей
 
-   - **Описание**: Возвращает информацию о конкретном узле, включая все исходящие и входящие связи.
+   - **Описание**: Возвращает информацию о конкретном узле, включая все доступные атрибуты узла, его исходящие и входящие связи, а также все доступные атрибуты связанных узлов.
    - **Параметры**:
-     - `node_id` (int): Идентификатор узла.
+     - `node_id` (int): Идентификатор узла, для которого необходимо получить информацию.
    - **Пример запроса**:
      ```http
-     GET /node/1001
+     GET /node/288555774
      ```
    - **Пример ответа**:
      ```json
-     {
-       "node": {"id": 1001, "label": "User", "attributes": {"name": "Test User 1", "screen_name": "testuser1"}},
-       "relationships": [
-         {"relationship": "Subscribe", "direction": "outgoing", "related_node": {"id": 1003, "label": "Group"}},
-         {"relationship": "Follow", "direction": "incoming", "related_node": {"id": 1002, "label": "User"}}
-       ]
-     }
+     [
+       {
+         "node": {
+           "home_town": "",
+           "screen_name": "puritanin9",
+           "sex": 2,
+           "name": "Павел Демухаметов",
+           "id": 288555774,
+           "label": "User"
+         },
+         "relationship": "Subscribe",
+         "direction": "outgoing",
+         "related_node": {
+           "home_town": "Уфа",
+           "screen_name": "blacksilverufa",
+           "sex": 2,
+           "name": "Артур Blacksilver",
+           "id": 140277504,
+           "label": "User"
+         }
+       },
+       {
+         "node": {
+           "home_town": "",
+           "screen_name": "puritanin9",
+           "sex": 2,
+           "name": "Павел Демухаметов",
+           "id": 288555774,
+           "label": "User"
+         },
+         "relationship": "Follow",
+         "direction": "incoming",
+         "related_node": {
+           "home_town": "Москва",
+           "screen_name": "abakhrakh",
+           "sex": 2,
+           "name": "Андрей Бахрах",
+           "id": 155498565,
+           "label": "User"
+         }
+       }
+     ]
      ```
+   - **Описание полей ответа**:
+     - **`node`**: Информация о запрашиваемом узле, со всеми доступными атрибутами.
+       - `home_town` (string): Родной город узла.
+       - `screen_name` (string): Имя пользователя.
+       - `sex` (int): Пол пользователя.
+       - `name` (string): Имя пользователя.
+       - `id` (int): Идентификатор узла.
+       - `label` (string): Метка узла (например, "User" или "Group").
+     - **`relationship`**: Тип связи между узлом и `related_node`, `Subscribe` или `Follow`.
+     - **`direction`**: Направление связи относительно `node`:
+       - `outgoing`: Исходящая связь (узел подписан на `related_node`).
+       - `incoming`: Входящая связь (на узел подписан `related_node`).
+     - **`related_node`**: Описание узла, связанного с `node`, со всеми доступными атрибутами, аналогично `node`.
 
 4. **`POST /node`** - Создание узла и его связей
 
