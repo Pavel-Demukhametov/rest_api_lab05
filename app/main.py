@@ -7,7 +7,6 @@ app = FastAPI()
 
 setup_database()
 
-app.include_router(auth_router, prefix="")  # Подключите без префикса или добавьте, если требуется
+app.include_router(auth_router, prefix="")
 
-# Регистрация основных API маршрутов
 app.include_router(api_router)
